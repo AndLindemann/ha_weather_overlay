@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Canvas Animation Demo - Updated</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+        
+        #weather-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        
+        .demo-content {
+            position: relative;
+            z-index: 1;
+            color: white;
+            padding: 40px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .controls {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 15px;
+            margin-top: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 15px 20px;
+            font-size: 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        button.active {
+            background: #4CAF50;
+            border-color: #4CAF50;
+        }
+        
+        .info {
+            margin-top: 20px;
+            font-size: 16px;
+            line-height: 1.8;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .new-badge {
+            display: inline-block;
+            background: #ff6b6b;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="weather-canvas"></canvas>
+    
+    <div class="demo-content">
+        <h1>🌤️ Weather Canvas - Costa Rica Edition</h1>
+        
+        <div class="controls">
+            <h2>Select Weather Effect:</h2>
+            <div class="button-group">
+                <button onclick="setWeather('rainy')" id="btn-rainy">🌧️ Rain</button>
+                <button onclick="setWeather('pouring')" id="btn-pouring">⛈️ Heavy Rain</button>
+                <button onclick="setWeather('cloudy')" id="btn-cloudy">☁️ Cloudy <span class="new-badge">NEW</span></button>
+                <button onclick="setWeather('partlycloudy')" id="btn-partlycloudy">⛅ Partly Cloudy <span class="new-badge">NEW</span></button>
+                <button onclick="setWeather('fog')" id="btn-fog">🌫️ Fog <span class="new-badge">NEW</span></button>
+                <button onclick="setWeather('lightning')" id="btn-lightning">⚡ Lightning</button>
+                <button onclick="setWeather('lightning-rainy')" id="btn-lightning-rainy">⛈️ Lightning + Rain</button>
+                <button onclick="setWeather('snowy')" id="btn-snowy">❄️ Snow</button>
+                <button onclick="setWeather('snowy-rainy')" id="btn-snowy-rainy">🌨️ Snowy-Rainy</button>
+                <button onclick="setWeather('clear-night')" id="btn-clear-night">🌙 Clear Night <span class="new-badge">NEW</span></button>
+                <button onclick="setWeather('sunny')" id="btn-sunny">☀️ Sunny <span class="new-badge">NEW</span></button>
+            </div>
+            
+            <div class="info">
+                <p><strong>Current Effect:</strong> <span id="current-effect">Rain</span></p>
+                <p><strong>Particles:</strong> <span id="particle-count">0</span></p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>✨ New Effects for Costa Rica!</h3>
+            <p><strong>☁️ Cloudy/Partly Cloudy:</strong> Soft drifting clouds across the screen</p>
+            <p><strong>🌙 Clear Night:</strong> Twinkling stars in the upper half of the screen (starry night effect)</p>
+            <p><strong>☀️ Sunny:</strong> Subtle warm golden glow at the top (works on dark theme!)</p>
+            <p style="margin-top: 10px; opacity: 0.7;"><em>❄️ Removed: Snow and Snowy-Rainy (not needed in Costa Rica!)</em></p>
+        </div>
+        
+        <div class="card">
+            <h3>📝 About This Demo</h3>
+            <p>All effects work perfectly over dark backgrounds! The canvas is positioned above all content but allows interaction with elements below.</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('weather-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        let particles = [];
+        let currentWeather = 'rainy';
+        let animationId;
+        let lightningTimer = 0;
+        let lightningInterval = 1500 + Math.random() * 2500;
+        let showLightning = false;
+        let lightningDuration = 0;
+        let lightningBrightness = 0;
+        let lightningFadeSpeed = 0;
+        
+        const weatherConfigs = {
+            'rainy': {
+                maxParticles: 50,
+                color: 'rgba(174, 194, 224, 0.35)',
+                speedMin: 15,
+                speedMax: 25,
+                sizeMin: 1,
+                sizeMax: 2,
+                swayAmount: 0.5,
+                type: 'rain'
+            },
+            'pouring': {
+                maxParticles: 100,
+                color: 'rgba(174, 194, 224, 0.4)',
+                speedMin: 20,
+                speedMax: 30,
+                sizeMin: 1.5,
+                sizeMax: 3,
+                swayAmount: 2,
+                type: 'rain'
+            },
+            'cloudy': {
+                maxParticles: 5,
+                color: 'rgba(180, 180, 180, 0.05)',
+                speedMin: 0.3,
+                speedMax: 0.8,
+                sizeMin: 80,
+                sizeMax: 150,
+                swayAmount: 0.5,
+                type: 'clouds'
+            },
+            'partlycloudy': {
+                maxParticles: 3,
+                color: 'rgba(200, 200, 200, 0.04)',
+                speedMin: 0.4,
+                speedMax: 1,
+                sizeMin: 70,
+                sizeMax: 130,
+                swayAmount: 0.6,
+                type: 'clouds'
+            },
+            'fog': {
+                maxParticles: 8,
+                color: 'rgba(220, 220, 220, 0.05)',
+                speedMin: 0.15,
+                speedMax: 0.4,
+                sizeMin: 100,
+                sizeMax: 200,
+                swayAmount: 0.2,
+                type: 'clouds'
+            },
+            'snowy': {
+                maxParticles: 40,
+                color: 'rgba(255, 255, 255, 0.4)',
+                speedMin: 2,
+                speedMax: 5,
+                sizeMin: 2,
+                sizeMax: 5,
+                swayAmount: 1.5,
+                type: 'snow'
+            },
+            'snowy-rainy': {
+                maxParticles: 50,
+                color: 'rgba(200, 210, 230, 0.35)',
+                speedMin: 8,
+                speedMax: 15,
+                sizeMin: 1.5,
+                sizeMax: 4,
+                swayAmount: 1,
+                type: 'mixed'
+            },
+            'lightning': {
+                maxParticles: 0,
+                type: 'lightning'
+            },
+            'lightning-rainy': {
+                maxParticles: 50,
+                color: 'rgba(174, 194, 224, 0.35)',
+                speedMin: 15,
+                speedMax: 25,
+                sizeMin: 1,
+                sizeMax: 2,
+                swayAmount: 0.5,
+                type: 'rain',
+                hasLightning: true
+            },
+            'clear-night': {
+                maxParticles: 120,
+                type: 'stars'
+            },
+            'sunny': {
+                maxParticles: 0,
+                type: 'sunny'
+            }
+        };
+        
+        class Particle {
+            constructor(config) {
+                this.reset(config);
+                if (config.type === 'stars') {
+                    this.y = Math.random() * (canvas.height * 0.5);
+                    this.twinkleSpeed = 0.02 + Math.random() * 0.03;
+                    this.twinklePhase = Math.random() * Math.PI * 2;
+                } else {
+                    this.y = Math.random() * canvas.height;
+                }
+            }
+            
+            reset(config) {
+                this.x = Math.random() * canvas.width;
+                
+                if (config.type === 'stars') {
+                    this.y = Math.random() * (canvas.height * 0.5);
+                    this.size = 0.8 + Math.random() * 1.2; // Smaller stars
+                    this.twinkleSpeed = 0.02 + Math.random() * 0.03;
+                    this.twinklePhase = Math.random() * Math.PI * 2;
+                    this.opacity = 0.2 + Math.random() * 0.4; // Less bright
+                    
+                    // Assign to one of 4 groups
+                    this.group = Math.floor(Math.random() * 4);
+                    
+                    // Each group has slightly different base position offsets
+                    this.baseX = this.x;
+                    this.baseY = this.y;
+                    this.driftPhase = Math.random() * Math.PI * 2;
+                    this.driftSpeed = 0.0003 + Math.random() * 0.0002;
+                    
+                    // Different drift patterns per group
+                    if (this.group === 0) {
+                        this.driftAmountX = 15;
+                        this.driftAmountY = 10;
+                    } else if (this.group === 1) {
+                        this.driftAmountX = -12;
+                        this.driftAmountY = 15;
+                    } else if (this.group === 2) {
+                        this.driftAmountX = 18;
+                        this.driftAmountY = -8;
+                    } else {
+                        this.driftAmountX = -10;
+                        this.driftAmountY = -12;
+                    }
+                } else {
+                    this.y = -10;
+                    this.speed = config.speedMin + Math.random() * (config.speedMax - config.speedMin);
+                    this.size = config.sizeMin + Math.random() * (config.sizeMax - config.sizeMin);
+                    this.sway = (Math.random() - 0.5) * config.swayAmount;
+                    this.opacity = 0.5 + Math.random() * 0.5;
+                    
+                    // Pre-generate cloud puff configuration
+                    if (config.type === 'clouds') {
+                        this.puffCount = 5 + Math.floor(Math.random() * 3);
+                        this.puffSizes = [];
+                        for (let i = 0; i < this.puffCount; i++) {
+                            this.puffSizes.push(0.4 + Math.random() * 0.3);
+                        }
+                    }
+                }
+                
+                this.type = config.type;
+            }
+            
+            update(config) {
+                if (this.type === 'stars') {
+                    this.twinklePhase += this.twinkleSpeed;
+                    
+                    // Slowly drift the entire group
+                    this.driftPhase += this.driftSpeed;
+                    this.x = this.baseX + Math.sin(this.driftPhase) * this.driftAmountX;
+                    this.y = this.baseY + Math.cos(this.driftPhase * 0.7) * this.driftAmountY;
+                    return;
+                }
+                
+                if (this.type === 'clouds') {
+                    // Clouds drift horizontally from left to right
+                    this.x += this.speed;
+                    
+                    // Slight vertical drift for natural movement
+                    this.y += Math.sin(this.x * 0.01) * 0.2;
+                    
+                    // When cloud goes off right edge, reset to left
+                    if (this.x > canvas.width + this.size) {
+                        this.x = -this.size;
+                        this.y = Math.random() * canvas.height;
+                    }
+                    return;
+                }
+                
+                // Rain, snow, etc. fall down
+                this.y += this.speed;
+                this.x += this.sway;
+                
+                if (this.y > canvas.height) {
+                    this.reset(config);
+                }
+                
+                if (this.x < 0 || this.x > canvas.width) {
+                    this.x = Math.random() * canvas.width;
+                }
+            }
+            
+            draw() {
+                ctx.globalAlpha = this.opacity;
+                
+                if (this.type === 'stars') {
+                    const twinkle = (Math.sin(this.twinklePhase) + 1) / 2;
+                    const starOpacity = this.opacity * (0.4 + twinkle * 0.6);
+                    ctx.globalAlpha = starOpacity;
+                    
+                    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+                    ctx.shadowColor = 'rgba(200, 220, 255, 0.5)'; // Less glow
+                    ctx.shadowBlur = 2 + twinkle * 1.5; // Less blur
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    
+                } else if (this.type === 'clouds') {
+                    // Fluffy cotton-like clouds
+                    const baseOpacity = this.opacity * 0.6;
+                    const baseColor = weatherConfigs[currentWeather].color;
+                    
+                    // Use pre-generated puff configuration
+                    for (let i = 0; i < this.puffCount; i++) {
+                        const angle = (i / this.puffCount) * Math.PI * 2;
+                        const puffSize = this.size * this.puffSizes[i];
+                        const offsetX = Math.cos(angle) * this.size * 0.4;
+                        const offsetY = Math.sin(angle) * this.size * 0.25;
+                        
+                        const gradient = ctx.createRadialGradient(
+                            this.x + offsetX, this.y + offsetY, 0,
+                            this.x + offsetX, this.y + offsetY, puffSize
+                        );
+                        gradient.addColorStop(0, baseColor);
+                        gradient.addColorStop(0.6, baseColor.replace(/[\d.]+\)$/g, '0.02)'));
+                        gradient.addColorStop(1, 'rgba(180, 180, 180, 0)');
+                        
+                        ctx.globalAlpha = baseOpacity;
+                        ctx.fillStyle = gradient;
+                        ctx.beginPath();
+                        ctx.arc(this.x + offsetX, this.y + offsetY, puffSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
+                    
+                } else if (this.type === 'rain') {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.x + this.sway, this.y + this.size * 4);
+                    ctx.strokeStyle = weatherConfigs[currentWeather].color;
+                    ctx.lineWidth = this.size;
+                    ctx.stroke();
+                } else if (this.type === 'fog') {
+                    const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                    gradient.addColorStop(0, weatherConfigs[currentWeather].color);
+                    gradient.addColorStop(1, 'rgba(220, 220, 220, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.globalAlpha = 1;
+            }
+        }
+        
+        function initParticles(weather) {
+            particles = [];
+            const config = weatherConfigs[weather];
+            if (config && config.maxParticles > 0) {
+                for (let i = 0; i < config.maxParticles; i++) {
+                    particles.push(new Particle(config));
+                }
+            }
+        }
+        
+        function drawSunnyGlow() {
+            // Warm glow in the top right corner - 100% bigger
+            const sunGradient = ctx.createRadialGradient(
+                window.innerWidth * 0.90, window.innerHeight * 0.10, 0,
+                window.innerWidth * 0.90, window.innerHeight * 0.10, 360
+            );
+            sunGradient.addColorStop(0, 'rgba(255, 200, 80, 0.05)');
+            sunGradient.addColorStop(0.6, 'rgba(255, 180, 60, 0.02)');
+            sunGradient.addColorStop(1, 'rgba(255, 160, 40, 0)');
+            
+            ctx.fillStyle = sunGradient;
+            ctx.beginPath();
+            ctx.arc(window.innerWidth * 0.90, window.innerHeight * 0.10, 360, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawLightning() {
+            const lightX = Math.random() * canvas.width;
+            const lightY = Math.random() * (canvas.height * 0.3);
+            
+            const gradient = ctx.createRadialGradient(
+                lightX, lightY, 0,
+                lightX, lightY, canvas.width * 0.8
+            );
+            
+            const colorVariation = Math.random() * 30;
+            const blue = 220 + colorVariation;
+            const green = 230 + colorVariation;
+            
+            gradient.addColorStop(0, `rgba(255, ${green}, ${blue}, ${lightningBrightness * 0.4})`);
+            gradient.addColorStop(0.3, `rgba(240, ${green - 20}, ${blue - 20}, ${lightningBrightness * 0.25})`);
+            gradient.addColorStop(0.7, `rgba(200, ${green - 40}, ${blue - 40}, ${lightningBrightness * 0.1})`);
+            gradient.addColorStop(1, 'rgba(180, 190, 210, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = `rgba(255, 255, 255, ${lightningBrightness * 0.15})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const config = weatherConfigs[currentWeather];
+            if (config) {
+                if (config.type === 'sunny') {
+                    drawSunnyGlow();
+                }
+                
+                if (particles.length > 0) {
+                    particles.forEach(particle => {
+                        particle.update(config);
+                        particle.draw();
+                    });
+                }
+            }
+            
+            if (config && (config.type === 'lightning' || config.hasLightning)) {
+                lightningTimer += 16;
+                
+                if (showLightning) {
+                    lightningDuration -= 16;
+                    
+                    if (lightningDuration <= 0) {
+                        showLightning = false;
+                        lightningTimer = 0;
+                        lightningInterval = 1500 + Math.random() * 2500;
+                    } else {
+                        lightningBrightness = Math.max(0, lightningBrightness - lightningFadeSpeed);
+                        drawLightning();
+                    }
+                } else if (lightningTimer >= lightningInterval) {
+                    showLightning = true;
+                    
+                    const flashType = Math.random();
+                    
+                    if (flashType < 0.3) {
+                        lightningDuration = 150 + Math.random() * 100;
+                        lightningBrightness = 0.7 + Math.random() * 0.3;
+                    } else if (flashType < 0.6) {
+                        lightningDuration = 600 + Math.random() * 400;
+                        lightningBrightness = 0.5 + Math.random() * 0.2;
+                    } else {
+                        lightningDuration = 300 + Math.random() * 200;
+                        lightningBrightness = 0.6 + Math.random() * 0.3;
+                    }
+                    
+                    lightningFadeSpeed = lightningBrightness / (lightningDuration / 16);
+                }
+            }
+            
+            document.getElementById('particle-count').textContent = particles.length;
+            
+            animationId = requestAnimationFrame(animate);
+        }
+        
+        function setWeather(weather) {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            currentWeather = weather;
+            
+            lightningTimer = 0;
+            showLightning = false;
+            lightningDuration = 0;
+            lightningBrightness = 0;
+            lightningInterval = 1500 + Math.random() * 2500;
+            
+            document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${weather}`).classList.add('active');
+            
+            let effectName = weather.charAt(0).toUpperCase() + weather.slice(1);
+            if (weather === 'pouring') effectName = 'Heavy Rain';
+            if (weather === 'lightning-rainy') effectName = 'Lightning + Rain';
+            if (weather === 'partlycloudy') effectName = 'Partly Cloudy';
+            if (weather === 'clear-night') effectName = 'Clear Night (Stars)';
+            document.getElementById('current-effect').textContent = effectName;
+            
+            if (weatherConfigs[weather]) {
+                initParticles(weather);
+                animate();
+            } else {
+                particles = [];
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        setWeather('rainy');
+    </script>
+</body>
+</html>

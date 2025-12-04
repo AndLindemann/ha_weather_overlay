@@ -1,0 +1,10 @@
+# Weather Overlay Control Card
+# Copy this entire block and paste it when adding a new card to your dashboard
+
+type: entities
+title: Weather Overlay Controls
+entities:
+  - entity: input_boolean.weather_overlay
+    name: Enable Overlay
+  - entity: input_select.weather_overlay_test
+    name: Test Effect
