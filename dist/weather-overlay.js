@@ -1,24 +1,72 @@
 // Weather Overlay for Home Assistant
 // Fullscreen canvas weather animations based on weather entity state
+// Version 2.0 - Improved defaults and debugging
 (function() {
   'use strict';
   
-  // Configuration
-  const WEATHER_ENTITY = 'weather.pirateweather'; // Change this to your weather entity
-  const TOGGLE_ENTITY = 'input_boolean.weather_overlay'; // Toggle to enable/disable overlay
-  const TEST_ENTITY = 'input_select.weather_overlay_test'; // Test selector for different weather states
-  const UPDATE_INTERVAL = 5000; // Check weather every 5 seconds
+  // ============================================
+  // CONFIGURATION - Edit these values as needed
+  // ============================================
   
-  // Dashboard filtering - specify which dashboards should show the overlay
-  // Options:
-  //   [] (empty array) = Show on ALL dashboards (default)
-  //   ['lovelace', 'dashboard-name'] = Show only on these specific dashboards
-  // Dashboard names can be found in the URL: /lovelace/dashboard-name
-  const ENABLED_DASHBOARDS = ['home']; // Only show on /dashboard-test/home
-  // Examples:
-  //   ['lovelace'] = Only default dashboard
-  //   ['lovelace', 'mobile'] = Only on default and mobile dashboards
-  //   ['home', 'weather'] = Only on custom 'home' and 'weather' dashboards
+  // Your weather entity (REQUIRED - change this to match your setup)
+  // Examples: 'weather.home', 'weather.openweathermap', 'weather.accuweather'
+  const WEATHER_ENTITY = 'weather.home';
+  
+  // Optional: Toggle to enable/disable overlay (set to '' to disable this feature)
+  // If the entity doesn't exist, overlay will always be enabled
+  const TOGGLE_ENTITY = 'input_boolean.weather_overlay';
+  
+  // Optional: Test selector for different weather states (set to '' to disable)
+  // Useful for testing different weather effects
+  const TEST_ENTITY = 'input_select.weather_overlay_test';
+  
+  // How often to check weather (in milliseconds)
+  const UPDATE_INTERVAL = 5000;
+  
+  // Optional: Rain sensor for cross-checking (set to '' to disable)
+  // If your weather service reports false rain, this sensor can verify
+  const RAIN_SENSOR_ENTITY = ''; // e.g., 'sensor.rain_gauge' or 'sensor.hydrawise_rain'
+  const REQUIRE_RAIN_CONFIRMATION = false; // Set to true to require rain sensor confirmation
+  
+  // Dashboard filtering
+  // [] = Show on ALL dashboards (recommended for most users)
+  // ['lovelace'] = Only on default dashboard
+  // ['home', 'weather'] = Only on specific dashboards
+  const ENABLED_DASHBOARDS = []; // Empty = ALL dashboards
+  
+  // Debug mode - set to true to see detailed logs in browser console
+  const DEBUG_MODE = true;
+  
+  // ============================================
+  // END CONFIGURATION
+  // ============================================
+  
+  // Logging helper
+  function log(message, data = null) {
+    if (DEBUG_MODE) {
+      if (data) {
+        console.log(`[Weather Overlay] ${message}`, data);
+      } else {
+        console.log(`[Weather Overlay] ${message}`);
+      }
+    }
+  }
+  
+  function warn(message, data = null) {
+    if (data) {
+      console.warn(`[Weather Overlay] ⚠️ ${message}`, data);
+    } else {
+      console.warn(`[Weather Overlay] ⚠️ ${message}`);
+    }
+  }
+  
+  function error(message, data = null) {
+    if (data) {
+      console.error(`[Weather Overlay] ❌ ${message}`, data);
+    } else {
+      console.error(`[Weather Overlay] ❌ ${message}`);
+    }
+  }
   
   let canvas = null;
   let ctx = null;
@@ -32,12 +80,13 @@
   let lightningDuration = 0;
   let lightningBrightness = 0;
   let lightningFadeSpeed = 0;
+  let initializationComplete = false;
   
   // Weather particle configurations
   const weatherConfigs = {
     'rainy': {
-      maxParticles: 50,  // Reduced from 100 (was 150)
-      color: 'rgba(174, 194, 224, 0.35)',  // Reduced from 0.5 (was 0.7)
+      maxParticles: 50,
+      color: 'rgba(174, 194, 224, 0.35)',
       speedMin: 15,
       speedMax: 25,
       sizeMin: 1,
@@ -46,19 +95,19 @@
       type: 'rain'
     },
     'pouring': {
-      maxParticles: 50,  // Same as rain
-      color: 'rgba(174, 194, 224, 0.35)',  // Same as rain
-      speedMin: 10.5,  // 30% slower than rain (15 * 0.7 = 10.5)
-      speedMax: 17.5,  // 30% slower than rain (25 * 0.7 = 17.5)
-      sizeMin: 1,  // Same width as rain
-      sizeMax: 2,  // Same width as rain
+      maxParticles: 50,
+      color: 'rgba(174, 194, 224, 0.35)',
+      speedMin: 10.5,
+      speedMax: 17.5,
+      sizeMin: 1,
+      sizeMax: 2,
       swayAmount: 0.5,
       type: 'rain',
-      lengthMultiplier: 4  // 4x longer drops
+      lengthMultiplier: 4
     },
     'cloudy': {
       maxParticles: 10,
-      color: 'rgba(180, 180, 180, 0.10)',  // Double from 0.05
+      color: 'rgba(180, 180, 180, 0.10)',
       speedMin: 0.3,
       speedMax: 0.8,
       sizeMin: 80,
@@ -68,7 +117,7 @@
     },
     'partlycloudy': {
       maxParticles: 6,
-      color: 'rgba(200, 200, 200, 0.08)',  // Double from 0.04
+      color: 'rgba(200, 200, 200, 0.08)',
       speedMin: 0.4,
       speedMax: 1,
       sizeMin: 70,
@@ -78,7 +127,7 @@
     },
     'fog': {
       maxParticles: 16,
-      color: 'rgba(220, 220, 220, 0.10)',  // Double from 0.05
+      color: 'rgba(220, 220, 220, 0.10)',
       speedMin: 0.15,
       speedMax: 0.4,
       sizeMin: 100,
@@ -87,8 +136,8 @@
       type: 'clouds'
     },
     'snowy': {
-      maxParticles: 40,  // Reduced from 70 (was 100)
-      color: 'rgba(255, 255, 255, 0.4)',  // Reduced from 0.6 (was 0.8)
+      maxParticles: 40,
+      color: 'rgba(255, 255, 255, 0.4)',
       speedMin: 2,
       speedMax: 5,
       sizeMin: 2,
@@ -97,8 +146,8 @@
       type: 'snow'
     },
     'snowy-rainy': {
-      maxParticles: 50,  // Reduced from 100 (was 150)
-      color: 'rgba(200, 210, 230, 0.35)',  // Reduced from 0.5 (was 0.7)
+      maxParticles: 50,
+      color: 'rgba(200, 210, 230, 0.35)',
       speedMin: 8,
       speedMax: 15,
       sizeMin: 1.5,
@@ -111,8 +160,8 @@
       type: 'lightning'
     },
     'lightning-rainy': {
-      maxParticles: 50,  // Match rainy
-      color: 'rgba(174, 194, 224, 0.35)',  // Match rainy
+      maxParticles: 50,
+      color: 'rgba(174, 194, 224, 0.35)',
       speedMin: 15,
       speedMax: 25,
       sizeMin: 1,
@@ -122,10 +171,35 @@
       hasLightning: true
     },
     'clear-night': {
-      maxParticles: 36,  // 200% more stars
+      maxParticles: 36,
       type: 'stars'
     },
     'sunny': {
+      maxParticles: 0,
+      type: 'sunny'
+    },
+    // Additional states for compatibility
+    'windy': {
+      maxParticles: 6,
+      color: 'rgba(200, 200, 200, 0.06)',
+      speedMin: 2,
+      speedMax: 4,
+      sizeMin: 70,
+      sizeMax: 130,
+      swayAmount: 0.6,
+      type: 'clouds'
+    },
+    'hail': {
+      maxParticles: 40,
+      color: 'rgba(200, 220, 255, 0.5)',
+      speedMin: 20,
+      speedMax: 30,
+      sizeMin: 3,
+      sizeMax: 6,
+      swayAmount: 0.3,
+      type: 'snow'
+    },
+    'exceptional': {
       maxParticles: 0,
       type: 'sunny'
     }
@@ -135,9 +209,8 @@
   class Particle {
     constructor(config) {
       this.reset(config);
-      // Stars start at random positions, others start above screen
       if (config.type === 'stars') {
-        this.y = Math.random() * (window.innerHeight * 0.5); // Upper half only
+        this.y = Math.random() * (window.innerHeight * 0.5);
         this.twinkleSpeed = 0.02 + Math.random() * 0.03;
         this.twinklePhase = Math.random() * Math.PI * 2;
       } else {
@@ -149,22 +222,16 @@
       this.x = Math.random() * window.innerWidth;
       
       if (config.type === 'stars') {
-        // Each particle represents one star pattern (position)
-        // Stars will fade in, shine, fade out, then reappear elsewhere
         this.x = Math.random() * window.innerWidth;
-        this.y = Math.random() * (window.innerHeight * 0.3);  // Upper 30% only
-        this.size = 1 + Math.random() * 1.5;  // Smaller, softer
-        
-        // Lifecycle: fade in (0-1s), shine bright (1-3s), fade out (3-4s), wait (4-6s), repeat
-        this.phase = Math.random() * 6;  // Start at random point in cycle
-        this.cycleLength = 6;  // 6 second cycle
+        this.y = Math.random() * (window.innerHeight * 0.3);
+        this.size = 1 + Math.random() * 1.5;
+        this.phase = Math.random() * 6;
+        this.cycleLength = 6;
         this.opacity = 0;
-        
       } else {
-        // Clouds start spread across screen and stay in upper 30%
         if (config.type === 'clouds') {
-          this.x = Math.random() * window.innerWidth;  // Random position across screen
-          this.y = Math.random() * (window.innerHeight * 0.3);  // Upper 30% only
+          this.x = Math.random() * window.innerWidth;
+          this.y = Math.random() * (window.innerHeight * 0.3);
         } else {
           this.y = -10;
         }
@@ -174,7 +241,6 @@
         this.sway = (Math.random() - 0.5) * config.swayAmount;
         this.opacity = 0.5 + Math.random() * 0.5;
         
-        // Pre-generate cloud puff configuration to prevent flickering
         if (config.type === 'clouds') {
           this.puffCount = 5 + Math.floor(Math.random() * 3);
           this.puffSizes = [];
@@ -189,28 +255,21 @@
     
     update(config) {
       if (this.type === 'stars') {
-        // Advance through the cycle: fade in → shine → fade out → disappear → repeat
-        this.phase += 0.016;  // ~60fps = 0.016 seconds per frame
+        this.phase += 0.016;
         
         if (this.phase >= this.cycleLength) {
-          // Cycle complete - pick new random position in upper 30%
           this.phase = 0;
           this.x = Math.random() * window.innerWidth;
           this.y = Math.random() * (window.innerHeight * 0.3);
         }
         
-        // Calculate opacity based on phase
         if (this.phase < 1) {
-          // Fade in (0-1s)
           this.opacity = this.phase;
         } else if (this.phase < 3) {
-          // Shine bright (1-3s)
-          this.opacity = 0.8 + Math.sin((this.phase - 1) * Math.PI) * 0.2;  // Gentle twinkle
+          this.opacity = 0.8 + Math.sin((this.phase - 1) * Math.PI) * 0.2;
         } else if (this.phase < 4) {
-          // Fade out (3-4s)
           this.opacity = 1 - (this.phase - 3);
         } else {
-          // Disappeared (4-6s)
           this.opacity = 0;
         }
         
@@ -218,13 +277,9 @@
       }
       
       if (this.type === 'clouds') {
-        // Clouds drift horizontally from left to right
         this.x += this.speed;
-        
-        // Slight vertical drift for natural movement
         this.y += Math.sin(this.x * 0.01) * 0.2;
         
-        // When cloud goes off right edge, reset to left
         if (this.x > window.innerWidth + this.size) {
           this.x = -this.size;
           this.y = Math.random() * window.innerHeight;
@@ -232,7 +287,6 @@
         return;
       }
       
-      // Rain, snow, etc. fall down
       this.y += this.speed;
       this.x += this.sway;
       
@@ -249,24 +303,21 @@
       ctx.globalAlpha = this.opacity;
       
       if (this.type === 'stars') {
-        // Soft natural stars with diffuse glow
         if (this.opacity > 0) {
-          ctx.globalAlpha = this.opacity * 0.7;  // Softer overall
+          ctx.globalAlpha = this.opacity * 0.7;
           ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
           ctx.shadowColor = 'rgba(200, 220, 255, 0.6)';
-          ctx.shadowBlur = 4 + this.opacity * 3;  // More blur for softer look
+          ctx.shadowBlur = 4 + this.opacity * 3;
           ctx.beginPath();
-          ctx.arc(this.x, this.y, this.size * 0.8, 0, Math.PI * 2);  // Slightly smaller
+          ctx.arc(this.x, this.y, this.size * 0.8, 0, Math.PI * 2);
           ctx.fill();
           ctx.shadowBlur = 0;
         }
         
       } else if (this.type === 'clouds') {
-        // Fluffy cotton-like clouds with multiple overlapping circles
         const baseOpacity = this.opacity * 0.6;
-        const baseColor = weatherConfigs[currentWeather].color;
+        const baseColor = weatherConfigs[currentWeather]?.color || 'rgba(180, 180, 180, 0.10)';
         
-        // Use pre-generated puff configuration (prevents flickering)
         for (let i = 0; i < this.puffCount; i++) {
           const angle = (i / this.puffCount) * Math.PI * 2;
           const puffSize = this.size * this.puffSizes[i];
@@ -292,33 +343,30 @@
       } else if (this.type === 'snow') {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fillStyle = weatherConfigs[currentWeather].color;
+        ctx.fillStyle = weatherConfigs[currentWeather]?.color || 'rgba(255, 255, 255, 0.4)';
         ctx.fill();
       } else if (this.type === 'mixed') {
-        // Mixed snow/rain - alternate between drawing styles
         const isMixed = Math.random() > 0.5;
         if (isMixed) {
-          // Snow
           ctx.beginPath();
           ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-          ctx.fillStyle = weatherConfigs[currentWeather].color;
+          ctx.fillStyle = weatherConfigs[currentWeather]?.color || 'rgba(200, 210, 230, 0.35)';
           ctx.fill();
         } else {
-          // Rain
           ctx.beginPath();
           ctx.moveTo(this.x, this.y);
           ctx.lineTo(this.x + this.sway, this.y + this.size * 4);
-          ctx.strokeStyle = weatherConfigs[currentWeather].color;
+          ctx.strokeStyle = weatherConfigs[currentWeather]?.color || 'rgba(200, 210, 230, 0.35)';
           ctx.lineWidth = this.size * 0.7;
           ctx.stroke();
         }
       } else if (this.type === 'rain') {
-        const config = weatherConfigs[currentWeather];
-        const lengthMult = config.lengthMultiplier || 1;  // Default 1, pouring uses 3
+        const config = weatherConfigs[currentWeather] || {};
+        const lengthMult = config.lengthMultiplier || 1;
         ctx.beginPath();
         ctx.moveTo(this.x, this.y);
         ctx.lineTo(this.x + this.sway, this.y + this.size * 4 * lengthMult);
-        ctx.strokeStyle = config.color;
+        ctx.strokeStyle = config.color || 'rgba(174, 194, 224, 0.35)';
         ctx.lineWidth = this.size;
         ctx.stroke();
       }
@@ -329,7 +377,10 @@
   
   // Initialize canvas
   function initCanvas() {
-    if (canvas) return;
+    if (canvas) {
+      log('Canvas already exists, skipping initialization');
+      return;
+    }
     
     canvas = document.createElement('canvas');
     canvas.id = 'weather-overlay-canvas';
@@ -341,23 +392,18 @@
     canvas.style.pointerEvents = 'none';
     canvas.style.zIndex = '9999';
     
-    // Set actual canvas size (important for iPad/mobile)
     const dpr = window.devicePixelRatio || 1;
     canvas.width = window.innerWidth * dpr;
     canvas.height = window.innerHeight * dpr;
     
     document.body.appendChild(canvas);
     ctx = canvas.getContext('2d');
-    
-    // Scale context to match device pixel ratio (for sharp rendering on retina)
     ctx.scale(dpr, dpr);
     
-    console.log('[Weather Overlay] Canvas initialized', {
+    log('Canvas initialized', {
       width: canvas.width,
       height: canvas.height,
-      dpr: dpr,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight
+      dpr: dpr
     });
   }
   
@@ -370,16 +416,16 @@
         particles.push(new Particle(config));
       }
     }
+    log(`Initialized ${particles.length} particles for ${weather}`);
   }
   
   // Draw sunny ambient glow effect
   function drawSunnyGlow() {
-    // Warm glow - 500px radius
     const sunGradient = ctx.createRadialGradient(
       window.innerWidth * 0.90, window.innerHeight * 0.10, 0,
       window.innerWidth * 0.90, window.innerHeight * 0.10, 500
     );
-    sunGradient.addColorStop(0, 'rgba(255, 200, 80, 0.25)');  // Bright center
+    sunGradient.addColorStop(0, 'rgba(255, 200, 80, 0.25)');
     sunGradient.addColorStop(0.2, 'rgba(255, 180, 60, 0.15)');
     sunGradient.addColorStop(0.5, 'rgba(255, 160, 40, 0.08)');
     sunGradient.addColorStop(0.8, 'rgba(255, 140, 20, 0.03)');
@@ -419,16 +465,19 @@
   
   // Animation loop
   function animate() {
+    if (!ctx || !canvas) {
+      warn('Canvas or context not available, stopping animation');
+      return;
+    }
+    
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     const config = weatherConfigs[currentWeather];
     if (config) {
-      // Draw sunny ambient glow
       if (config.type === 'sunny') {
         drawSunnyGlow();
       }
       
-      // Draw particles (if any)
       if (particles.length > 0) {
         particles.forEach(particle => {
           particle.update(config);
@@ -475,91 +524,155 @@
     animationId = requestAnimationFrame(animate);
   }
   
+  // Get Home Assistant instance
+  function getHomeAssistant() {
+    const ha = document.querySelector('home-assistant');
+    if (!ha || !ha.hass) {
+      return null;
+    }
+    return ha;
+  }
+  
   // Get weather state from Home Assistant
   function getWeatherState() {
     try {
-      const homeAssistant = document.querySelector('home-assistant');
-      if (!homeAssistant || !homeAssistant.hass) {
+      const homeAssistant = getHomeAssistant();
+      if (!homeAssistant) {
+        warn('Home Assistant not available');
         return null;
       }
       
       // Check if test mode is active
-      const testEntity = homeAssistant.hass.states[TEST_ENTITY];
-      if (testEntity && testEntity.state !== 'Use Real Weather') {
-        console.log(`[Weather Overlay] Using test weather: ${testEntity.state}`);
-        return testEntity.state;
+      if (TEST_ENTITY) {
+        const testEntity = homeAssistant.hass.states[TEST_ENTITY];
+        if (testEntity && testEntity.state && testEntity.state !== 'Use Real Weather') {
+          log(`Using TEST weather: ${testEntity.state}`);
+          return testEntity.state;
+        }
       }
       
       // Use real weather entity
       const weatherEntity = homeAssistant.hass.states[WEATHER_ENTITY];
       if (!weatherEntity) {
-        console.warn(`[Weather Overlay] Entity ${WEATHER_ENTITY} not found`);
+        error(`Weather entity '${WEATHER_ENTITY}' not found!`);
+        error('Available weather entities:', Object.keys(homeAssistant.hass.states).filter(k => k.startsWith('weather.')));
         return null;
       }
       
-      return weatherEntity.state;
-    } catch (error) {
-      console.error('[Weather Overlay] Error getting weather state:', error);
+      let weatherState = weatherEntity.state;
+      log(`Weather entity state: ${weatherState}`);
+      
+      // Cross-check rainy/pouring with rain sensor if configured
+      if (RAIN_SENSOR_ENTITY && REQUIRE_RAIN_CONFIRMATION && (weatherState === 'rainy' || weatherState === 'pouring')) {
+        const rainSensor = homeAssistant.hass.states[RAIN_SENSOR_ENTITY];
+        
+        if (rainSensor) {
+          const rainRate = parseFloat(rainSensor.state);
+          const isActuallyRaining = !isNaN(rainRate) && rainRate > 0;
+          
+          if (!isActuallyRaining) {
+            log(`Weather says ${weatherState}, but rain sensor shows ${rainRate} - showing cloudy instead`);
+            weatherState = 'cloudy';
+          } else {
+            log(`Rain confirmed by sensor: ${rainRate}`);
+          }
+        } else {
+          warn(`Rain sensor '${RAIN_SENSOR_ENTITY}' not found`);
+        }
+      }
+      
+      // Check if weather state is supported
+      if (!weatherConfigs[weatherState]) {
+        warn(`Unknown weather state: '${weatherState}' - no animation available`);
+        warn('Supported states:', Object.keys(weatherConfigs));
+      }
+      
+      return weatherState;
+    } catch (err) {
+      error('Error getting weather state:', err);
       return null;
     }
   }
   
-  // Check if overlay is enabled
+  // Check if overlay is enabled via toggle
   function isOverlayEnabled() {
     try {
-      const homeAssistant = document.querySelector('home-assistant');
-      if (!homeAssistant || !homeAssistant.hass) {
-        return true; // Default to enabled if can't check
+      // If no toggle entity configured, always enabled
+      if (!TOGGLE_ENTITY) {
+        return true;
+      }
+      
+      const homeAssistant = getHomeAssistant();
+      if (!homeAssistant) {
+        return true; // Default to enabled if HA not ready
       }
       
       const toggleEntity = homeAssistant.hass.states[TOGGLE_ENTITY];
       if (!toggleEntity) {
-        console.warn(`[Weather Overlay] Toggle entity ${TOGGLE_ENTITY} not found, overlay enabled by default`);
-        return true; // Default to enabled if toggle doesn't exist
+        log(`Toggle entity '${TOGGLE_ENTITY}' not found - overlay enabled by default`);
+        return true;
       }
       
-      return toggleEntity.state === 'on';
-    } catch (error) {
-      console.error('[Weather Overlay] Error checking toggle state:', error);
-      return true; // Default to enabled on error
+      const enabled = toggleEntity.state === 'on';
+      if (!enabled) {
+        log('Overlay disabled via toggle');
+      }
+      return enabled;
+    } catch (err) {
+      error('Error checking toggle state:', err);
+      return true;
     }
   }
   
   // Check if current dashboard is in the enabled list
   function isOnEnabledDashboard() {
     // If ENABLED_DASHBOARDS is empty, show on all dashboards
-    if (ENABLED_DASHBOARDS.length === 0) {
+    if (!ENABLED_DASHBOARDS || ENABLED_DASHBOARDS.length === 0) {
+      log('Dashboard filtering disabled - showing on all dashboards');
       return true;
     }
     
-    // Get current dashboard from URL
-    // URL formats: 
-    //   /lovelace/dashboard-name
-    //   /dashboard-name/view-name
     const path = window.location.pathname;
     const pathParts = path.split('/').filter(p => p);
     
+    log('Current path:', path);
+    log('Path parts:', pathParts);
+    
     if (pathParts.length === 0) {
-      return false;
+      log('No path parts found - assuming home dashboard');
+      return ENABLED_DASHBOARDS.includes('lovelace') || ENABLED_DASHBOARDS.includes('home');
     }
     
     // Check for standard lovelace URLs: /lovelace or /lovelace/dashboard
     if (pathParts[0] === 'lovelace') {
       const dashboardName = pathParts.length === 1 ? 'lovelace' : pathParts[1];
       const enabled = ENABLED_DASHBOARDS.includes(dashboardName);
-      console.log(`[Weather Overlay] Dashboard: ${dashboardName}, Enabled: ${enabled}`);
+      log(`Dashboard: '${dashboardName}', Enabled: ${enabled}`);
       return enabled;
     }
     
-    // Check for custom dashboard URLs: /dashboard-test/home
-    // The last part is the view name
+    // Check for custom dashboard URLs
+    // Try matching against each path part
+    for (const part of pathParts) {
+      if (ENABLED_DASHBOARDS.includes(part)) {
+        log(`Dashboard: '${part}', Enabled: true`);
+        return true;
+      }
+    }
+    
+    // Last part is usually the view/dashboard name
     const dashboardName = pathParts[pathParts.length - 1];
     const enabled = ENABLED_DASHBOARDS.includes(dashboardName);
-    console.log(`[Weather Overlay] Dashboard: ${dashboardName}, Enabled: ${enabled}`);
+    log(`Dashboard: '${dashboardName}', Enabled: ${enabled}`);
+    
+    if (!enabled) {
+      log('Dashboard not in enabled list. Enabled dashboards:', ENABLED_DASHBOARDS);
+    }
+    
     return enabled;
   }
   
-  // Update weather
+  // Update weather and manage animation
   function updateWeather() {
     const now = Date.now();
     if (now - lastUpdateTime < UPDATE_INTERVAL) {
@@ -570,23 +683,21 @@
     
     // Check if overlay is enabled
     const enabled = isOverlayEnabled();
-    
-    // Check if we're on an enabled dashboard
     const onEnabledDashboard = isOnEnabledDashboard();
     
     if (!enabled || !onEnabledDashboard) {
-      // Hide canvas if disabled or wrong dashboard
       if (canvas) {
         canvas.style.display = 'none';
       }
       if (animationId) {
         cancelAnimationFrame(animationId);
         animationId = null;
+        log('Animation stopped (disabled or wrong dashboard)');
       }
       return;
     }
     
-    // Show canvas if enabled and on correct dashboard
+    // Show canvas
     if (canvas) {
       canvas.style.display = 'block';
     }
@@ -594,7 +705,7 @@
     const newWeather = getWeatherState();
     
     if (newWeather && newWeather !== currentWeather) {
-      console.log(`[Weather Overlay] Weather changed: ${currentWeather} -> ${newWeather}`);
+      log(`Weather changed: ${currentWeather} -> ${newWeather}`);
       currentWeather = newWeather;
       
       // Reset lightning timers
@@ -610,20 +721,21 @@
       }
       
       if (weatherConfigs[newWeather]) {
-        console.log(`[Weather Overlay] Initializing particles for ${newWeather}, config:`, weatherConfigs[newWeather]);
         initParticles(newWeather);
-        console.log(`[Weather Overlay] Created ${particles.length} particles`);
         animate();
+        log(`Animation started for: ${newWeather}`);
       } else {
         particles = [];
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
+        warn(`No animation config for weather: ${newWeather}`);
       }
     } else if (newWeather && !animationId && weatherConfigs[newWeather]) {
-      // Restart animation if it was stopped (including 0-particle effects like sunny, lightning, stars)
+      // Restart animation if it was stopped
       initParticles(newWeather);
       animate();
+      log(`Animation restarted for: ${newWeather}`);
     }
   }
   
@@ -634,49 +746,74 @@
       canvas.width = window.innerWidth * dpr;
       canvas.height = window.innerHeight * dpr;
       ctx.scale(dpr, dpr);
-      console.log('[Weather Overlay] Canvas resized', {
-        width: canvas.width,
-        height: canvas.height,
-        dpr: dpr
-      });
+      log('Canvas resized');
     }
   }
   
   // Wait for Home Assistant to load
   function waitForHomeAssistant() {
+    log('Waiting for Home Assistant...');
+    
+    let attempts = 0;
+    const maxAttempts = 60; // 30 seconds max
+    
     const checkHA = setInterval(() => {
-      const homeAssistant = document.querySelector('home-assistant');
-      if (homeAssistant && homeAssistant.hass) {
+      attempts++;
+      const homeAssistant = getHomeAssistant();
+      
+      if (homeAssistant) {
         clearInterval(checkHA);
-        console.log('[Weather Overlay] Home Assistant ready, initializing...');
+        log('Home Assistant ready!');
         init();
+      } else if (attempts >= maxAttempts) {
+        clearInterval(checkHA);
+        error('Home Assistant not found after 30 seconds. Is this a Home Assistant page?');
       }
     }, 500);
   }
   
   // Initialize
   function init() {
+    if (initializationComplete) {
+      log('Already initialized, skipping');
+      return;
+    }
+    
+    log('Initializing Weather Overlay v2.0...');
+    log('Configuration:', {
+      WEATHER_ENTITY,
+      TOGGLE_ENTITY: TOGGLE_ENTITY || '(disabled)',
+      TEST_ENTITY: TEST_ENTITY || '(disabled)',
+      RAIN_SENSOR_ENTITY: RAIN_SENSOR_ENTITY || '(disabled)',
+      ENABLED_DASHBOARDS: ENABLED_DASHBOARDS.length ? ENABLED_DASHBOARDS : '(all dashboards)'
+    });
+    
     initCanvas();
     
     // Check if overlay is enabled
     if (!isOverlayEnabled()) {
-      console.log('[Weather Overlay] Overlay is disabled via toggle');
+      log('Overlay is disabled via toggle');
       if (canvas) {
         canvas.style.display = 'none';
       }
-      // Still setup periodic checks in case it gets enabled later
-      setInterval(updateWeather, 1000);
-      window.addEventListener('resize', handleResize);
-      return;
-    }
-    
-    // Initial weather check
-    const weather = getWeatherState();
-    if (weather) {
-      currentWeather = weather;
-      initParticles(weather);
-      animate();
-      console.log(`[Weather Overlay] Started with weather: ${weather}`);
+    } else if (!isOnEnabledDashboard()) {
+      log('Not on enabled dashboard');
+      if (canvas) {
+        canvas.style.display = 'none';
+      }
+    } else {
+      // Initial weather check
+      const weather = getWeatherState();
+      if (weather) {
+        currentWeather = weather;
+        if (weatherConfigs[weather]) {
+          initParticles(weather);
+          animate();
+          log(`Started with weather: ${weather}`);
+        } else {
+          warn(`Weather '${weather}' has no animation config`);
+        }
+      }
     }
     
     // Setup periodic weather checks
@@ -690,10 +827,14 @@
     setInterval(() => {
       if (window.location.pathname !== lastPath) {
         lastPath = window.location.pathname;
-        console.log('[Weather Overlay] Dashboard changed, checking if enabled');
-        updateWeather(); // Check immediately on dashboard change
+        log('Dashboard changed, re-checking...');
+        lastUpdateTime = 0; // Force immediate update
+        updateWeather();
       }
     }, 500);
+    
+    initializationComplete = true;
+    log('✅ Initialization complete!');
   }
   
   // Start when DOM is ready
@@ -703,5 +844,5 @@
     waitForHomeAssistant();
   }
   
-  console.log('[Weather Overlay] Module loaded');
+  log('Module loaded - v2.0');
 })();
