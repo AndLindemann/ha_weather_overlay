@@ -147,19 +147,19 @@ Important! Clear your browser cache:
 
 Works automatically with these weather entity states:
 
-| State | Pirate Weather | Met.no | OpenWeatherMap |
-|-------|----------------|--------|----------------|
-| `rainy` | ✅ | ✅ | ✅ |
-| `pouring` | ✅ | ✅ | ✅ |
-| `cloudy` | ✅ | ✅ | ✅ |
-| `partlycloudy` | ✅ | ✅ | ✅ |
-| `fog` | ✅ | ✅ | ✅ |
-| `lightning` | ✅ | ✅ | ✅ |
-| `lightning-rainy` | ✅ | ✅ | ✅ |
-| `snowy` | ✅ | ✅ | ✅ |
-| `snowy-rainy` | ✅ | ✅ | ✅ |
-| `clear-night` | ✅ | ✅ | ✅ |
-| `sunny` | ✅ | ✅ | ✅ |
+| State | Pirate Weather | Met.no | OpenWeatherMap | MeteoSwiss |
+|-------|----------------|--------|----------------|-------------|
+| `rainy` | ✅ | ✅ | ✅ | ✅ |
+| `pouring` | ✅ | ✅ | ✅ | ✅ |
+| `cloudy` | ✅ | ✅ | ✅ | ✅ |
+| `partlycloudy` | ✅ | ✅ | ✅ | ✅ |
+| `fog` | ✅ | ✅ | ✅ | ✅ |
+| `lightning` | ✅ | ✅ | ✅ | ✅ |
+| `lightning-rainy` | ✅ | ✅ | ✅ | ✅ |
+| `snowy` | ✅ | ✅ | ✅ | ✅ |
+| `snowy-rainy` | ✅ | ✅ | ✅ | ✅ |
+| `clear-night` | ✅ | ✅ | ✅ | ✅ |
+| `sunny` | ✅ | ✅ | ✅ | ✅ |
 
 Other states (like `windy`) will show no animation.
 
