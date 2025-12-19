@@ -31,6 +31,7 @@ Fullscreen animated weather effects that automatically change based on your weat
   - 🌨️ Snowy-Rainy (150 mixed precipitation)
   - 🌙 Clear Night (200 twinkling stars in 4 drifting groups)
   - ☀️ Sunny (warm golden glow with sun circle)
+  - ⚪ Hail ( falling hailstones)
 
 - **Smart Controls**
   - Toggle on/off anytime
@@ -160,6 +161,7 @@ Works automatically with these weather entity states:
 | `snowy-rainy` | ✅ | ✅ | ✅ | ✅ |
 | `clear-night` | ✅ | ✅ | ✅ | ✅ |
 | `sunny` | ✅ | ✅ | ✅ | ✅ |
+| `hail` | - | - | - | ✅ |
 
 Other states (like `windy`) will show no animation.
 
@@ -256,7 +258,7 @@ Contributions welcome! Feel free to:
 
 ## 📝 To-Do / Ideas
 
-- [ ] Add hail effect
+- [x] Add hail effect
 - [ ] Add tornado/extreme wind effect
 - [ ] Add customization UI (instead of editing JS)
 - [ ] Add seasonal effects (autumn leaves, etc.)

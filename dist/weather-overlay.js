@@ -190,14 +190,14 @@
       type: 'clouds'
     },
     'hail': {
-      maxParticles: 40,
-      color: 'rgba(200, 220, 255, 0.5)',
-      speedMin: 20,
-      speedMax: 30,
-      sizeMin: 3,
-      sizeMax: 6,
-      swayAmount: 0.3,
-      type: 'snow'
+        maxParticles: 5,
+        color: 'rgba(255, 255, 255, 0.4)',
+        speedMin: 20,
+        speedMax: 30,
+        sizeMin: 5,
+        sizeMax: 8,
+        swayAmount: 0.2,
+        type: 'hail'
     },
     'exceptional': {
       maxParticles: 0,
@@ -387,7 +387,13 @@
         ctx.fillStyle = grad;
         ctx.fillRect(this.x - this.size, this.y -15, this.size * 2000, 300);
         ctx.globalAlpha = 1;
-      }
+        
+      } else if (this.type === 'hail') {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = weatherConfigs[currentWeather]?.color || 'rgba(255, 255, 255, 0.4)';
+        ctx.fill();
+      } 
 
 
       
